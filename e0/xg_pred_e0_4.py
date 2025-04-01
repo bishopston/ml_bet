@@ -113,12 +113,12 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_
 model = XGBClassifier(
     eval_metric='mlogloss', 
     use_label_encoder=False,
-    reg_alpha=0.2,  # Increase L1 regularization
-    reg_lambda=1,   # Keep L2 regularization
+    reg_alpha=0.5,  # Increase L1 regularization
+    reg_lambda=2,   # Keep L2 regularization
     max_depth=6,    # Limiting tree depth
-    learning_rate=0.05,
-    subsample=0.8,  # Subsample fraction for each tree
-    colsample_bytree=0.8  # Column sampling for each tree
+    learning_rate=0.03,
+    subsample=0.7,  # Subsample fraction for each tree
+    colsample_bytree=0.7  # Column sampling for each tree
 )
 model.fit(X_train, y_train)
 
@@ -177,11 +177,11 @@ plt.savefig('feature_importances.png')
 def prepare_match_prediction(home_team, away_team):
     match_features = {
         'HomeTeam': home_team, 'AwayTeam': away_team,
-        'HS': 9.8, 'AS': 12.0, 'HF': 7.6, 'AF': 9.2, 'HC': 2.4, 'AC': 5.4,
-        'RollingAvg_FTHG': 2.4, 'RollingAvg_FTAG': 1.6,
-        'RollingAvg_TotalShots': 21.8, 'RollingAvg_TotalCorners': 7.8,
-        'RollingAvg_HomeHST': 4.6, 'RollingAvg_AwayAST': 3.8,
-        'HomeTeam_Form': 6, 'AwayTeam_Form': 4
+        'HS': 14.8, 'AS': 8.2, 'HF': 13.8, 'AF': 11.8, 'HC': 5.0, 'AC': 3.4,
+        'RollingAvg_FTHG': 1.4, 'RollingAvg_FTAG': 1.2,
+        'RollingAvg_TotalShots': 23.0, 'RollingAvg_TotalCorners': 8.4,
+        'RollingAvg_HomeHST': 5.8, 'RollingAvg_AwayAST': 4.0,
+        'HomeTeam_Form': 1, 'AwayTeam_Form': 0
     }
     return pd.DataFrame([match_features])
 
@@ -213,7 +213,7 @@ def predict_match(model, home_team_name, away_team_name):
     return probabilities
 
 # Example usage
-team_names = ['Nott\'m Forest', 'Man United']
+team_names = ['Bournemouth', 'Ipswich']
 probabilities = predict_match(model, team_names[0], team_names[1])
 
 if probabilities is None:
