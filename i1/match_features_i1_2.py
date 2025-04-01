@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime
+from sklearn.preprocessing import MinMaxScaler
 
 def calculate_match_features(home_team, away_team, data, match_date=None):
     """
@@ -47,6 +48,12 @@ def calculate_match_features(home_team, away_team, data, match_date=None):
     match_features['HomeTeam_Form'] = calculate_form(home_team_matches, home_team)
     match_features['AwayTeam_Form'] = calculate_form(away_team_matches, away_team)
 
+    # Normalize form by dividing by window size
+    match_features['HomeTeam_Form'] = match_features['HomeTeam_Form'] / 2  # Scale to 0-1
+    match_features['AwayTeam_Form'] = match_features['AwayTeam_Form'] / 2  # Scale to 0-1    print(match_features['HomeTeam_Form'])
+    print(match_features['HomeTeam_Form'])
+    print(match_features['AwayTeam_Form'])
+    
     return pd.DataFrame([match_features])
 
 # Example usage

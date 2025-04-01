@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report
 from xgboost import XGBClassifier
@@ -12,16 +12,31 @@ data = pd.read_csv('I1_24_25.csv')
 # Ensure Date column is in datetime format
 data['Date'] = pd.to_datetime(data['Date'])
 
+# Fill missing market odds with median values
+for col in ['B365H', 'B365D', 'B365A']:
+    data[col] = data[col].fillna(data[col].median())
+
+# # Convert odds to implied probability (Optional)
+# data['Implied_Prob_H'] = 1 / data['B365H']
+# data['Implied_Prob_D'] = 1 / data['B365D']
+# data['Implied_Prob_A'] = 1 / data['B365A']
+
+# # Normalize implied probabilities (Optional)
+# scaler = StandardScaler()
+# data[['Implied_Prob_H', 'Implied_Prob_D', 'Implied_Prob_A']] = scaler.fit_transform(
+#     data[['Implied_Prob_H', 'Implied_Prob_D', 'Implied_Prob_A']]
+# )
+
 # Define correct FTR mapping
 ftr_mapping = {'H': 0, 'D': 1, 'A': 2}
 
-def calculate_team_form(data, team_name, match_date, window=2):
+def calculate_team_form(data, team_name, match_date, window=5):
     """
     Calculate team form from last N matches.
     Returns points based on: win=3, draw=1, loss=0
     """
     team_matches = data[(data['HomeTeam'] == team_name) | (data['AwayTeam'] == team_name)]
-    team_matches = team_matches[team_matches['Date'] <= match_date]
+    team_matches = team_matches[team_matches['Date'] < match_date]  # Exclude current match
     recent_matches = team_matches.sort_values('Date', ascending=False).head(window)
     
     form_points = 0
@@ -33,7 +48,7 @@ def calculate_team_form(data, team_name, match_date, window=2):
     
     return form_points
 
-def add_form_features(data, window=2):
+def add_form_features(data, window=5):
     """
     Add form features to the dataset for each match.
     """
@@ -55,39 +70,51 @@ def add_form_features(data, window=2):
 
 data = add_form_features(data)
 
-# Compute additional features
-data['TotalShots'] = data['HS'] + data['AS']
-data['TotalShotsOnTarget'] = data['HST'] + data['AST']
-data['TotalCorners'] = data['HC'] + data['AC']
+# Normalize form by dividing by window size
+data['HomeTeam_Form'] = data['HomeTeam_Form'] / 5  # Scale to 0-1
+data['AwayTeam_Form'] = data['AwayTeam_Form'] / 5  # Scale to 0-1
 
-# Rolling averages
-def compute_rolling_avg(data, window=5):
-    # Compute rolling averages for the last 'window' matches
-    data['RollingAvg_FTHG'] = data['FTHG'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_FTAG'] = data['FTAG'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_TotalShots'] = data['TotalShots'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_TotalCorners'] = data['TotalCorners'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHS'] = data['HS'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHST'] = data['HST'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHF'] = data['HF'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHC'] = data['HC'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAS'] = data['AS'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAST'] = data['AST'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAF'] = data['AF'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAC'] = data['AC'].rolling(window=window, min_periods=1).mean()
+# Compute rolling averages per team
+def compute_team_rolling_avg(data, window=5):
+    """
+    Compute rolling averages for team-specific stats over the last 'window' matches.
+    """
+    rolling_features = ['HS', 'HST', 'HF', 'HC', 'AS', 'AST', 'AF', 'AC', 'B365H', 'B365D', 'B365A']
+
+    for feature in rolling_features:
+        # Rolling average for home team stats
+        data[f'RollingAvg_Home_{feature}'] = (
+            data.groupby('HomeTeam')[feature]
+            .rolling(window=window, min_periods=1)
+            .mean()
+            .reset_index(0, drop=True)
+        )
+
+        # Rolling average for away team stats
+        data[f'RollingAvg_Away_{feature}'] = (
+            data.groupby('AwayTeam')[feature]
+            .rolling(window=window, min_periods=1)
+            .mean()
+            .reset_index(0, drop=True)
+        )
+
     return data
 
-data = compute_rolling_avg(data)
+data = compute_team_rolling_avg(data)
+
+
 
 # Define features
 features = [
-    'HomeTeam', 'AwayTeam', 'HS', 'AS', 'HF', 'AF', 'HC', 'AC',
-    'RollingAvg_FTHG', 'RollingAvg_FTAG', 'RollingAvg_TotalShots',
-    'RollingAvg_TotalCorners', 'RollingAvg_HomeHST', 'RollingAvg_AwayAST',
-    'HomeTeam_Form', 'AwayTeam_Form'
+    'HomeTeam', 'AwayTeam',
+    'RollingAvg_Home_HS', 'RollingAvg_Home_HST', 'RollingAvg_Home_HF', 'RollingAvg_Home_HC',
+    'RollingAvg_Away_AS', 'RollingAvg_Away_AST', 'RollingAvg_Away_AF', 'RollingAvg_Away_AC',
+    'HomeTeam_Form', 'AwayTeam_Form',
+    'B365H', 'B365D', 'B365A'
 ]
 
 data_filtered = data[features + ['FTR']].dropna()
+data_filtered.to_csv("/home/alexandros/ml_bet/data_ext.csv", index=None, sep='|')
 
 # Encode categorical columns
 home_team_le = LabelEncoder()
@@ -127,63 +154,32 @@ y_pred = model.predict(X_test)
 print(f"Model Accuracy: {accuracy_score(y_test, y_pred)}")
 print(classification_report(y_test, y_pred))
 
-# Check accuracy on training data
-train_pred = model.predict(X_train)
-train_acc = accuracy_score(y_train, train_pred)
-
-# Check accuracy on test data
-test_pred = model.predict(X_test)
-test_acc = accuracy_score(y_test, test_pred)
-
-print(f"Training Accuracy: {train_acc:.4f}")
-print(f"Test Accuracy: {test_acc:.4f}")
-
-# Perform 5-fold cross-validation
+# Cross-validation
 cv_scores = cross_val_score(model, X, y, cv=5, scoring='accuracy')
+print(f"Cross-validation accuracy: {cv_scores.mean():.4f}")
 
-print(f"Cross-validation accuracy scores: {cv_scores}")
-print(f"Mean accuracy: {cv_scores.mean():.4f}")
-
-# Get the feature importances from the model
+# Feature importance
 importances = model.feature_importances_
-
-# Sort the importances in descending order
 indices = np.argsort(importances)[::-1]
 
-# Create a DataFrame to hold the feature names and their corresponding importances
+# Save feature importance
 feature_importance_df = pd.DataFrame({
     'Feature': [features[i] for i in indices],
     'Importance': importances[indices]
 })
-
-# Save the table as a CSV file
 feature_importance_df.to_csv('feature_importances.csv', index=False)
-
-# Optionally, print the table
-#print(feature_importance_df)
-
-# Plot feature importances
-plt.figure(figsize=(10, 8))
-plt.barh(range(len(indices)), importances[indices])
-plt.yticks(range(len(indices)), [features[i] for i in indices])
-plt.xlabel('Feature Importance')
-plt.title('Feature Importances')
-plt.tight_layout()
-
-# Save the plot to a file
-plt.savefig('feature_importances.png')
 
 # Prepare match prediction
 def prepare_match_prediction(home_team, away_team):
-    match_features = {
+    return pd.DataFrame([{
         'HomeTeam': home_team, 'AwayTeam': away_team,
-        'HS': 18.0, 'AS': 9.8, 'HF': 15.2, 'AF': 13.0, 'HC': 5.6, 'AC': 4.8,
-        'RollingAvg_FTHG': 1.8, 'RollingAvg_FTAG': 0.8,
-        'RollingAvg_TotalShots': 27.8, 'RollingAvg_TotalCorners': 10.4,
-        'RollingAvg_HomeHST': 6.6, 'RollingAvg_AwayAST': 2.4,
-        'HomeTeam_Form': 0, 'AwayTeam_Form': 4
-    }
-    return pd.DataFrame([match_features])
+        'RollingAvg_Home_HS': 18.0, 'RollingAvg_Home_HST': 6.6, 
+        'RollingAvg_Home_HF': 15.2, 'RollingAvg_Home_HC': 5.6,
+        'RollingAvg_Away_AS': 9.8, 'RollingAvg_Away_AST': 2.4, 
+        'RollingAvg_Away_AF': 13.0, 'RollingAvg_Away_AC': 4.8,
+        'HomeTeam_Form': 0.0, 'AwayTeam_Form': 2.0,
+        'B365H': 1.62, 'B365D': 3.25, 'B365A': 5.25
+    }])
 
 # Prediction function
 def predict_match(model, home_team_name, away_team_name):
@@ -212,13 +208,7 @@ def predict_match(model, home_team_name, away_team_name):
     
     return probabilities
 
-# Example usage
+# Predict match
 team_names = ['Juventus', 'Genoa']
 probabilities = predict_match(model, team_names[0], team_names[1])
-
-if probabilities is None:
-    print("\nPlease use the exact team names as they appear in the dataset.")
-else:
-    print("\nPrediction Results:")
-    for outcome, prob in probabilities.items():
-        print(f"{outcome}: {prob}%")
+print(probabilities)

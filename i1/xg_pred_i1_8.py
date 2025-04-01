@@ -33,27 +33,46 @@ def calculate_team_form(data, team_name, match_date, window=2):
     
     return form_points
 
-def add_form_features(data, window=2):
+def calculate_total_points(data, team_name, match_date):
     """
-    Add form features to the dataset for each match.
+    Calculate total points for a team up to a specific match date.
+    """
+    team_matches = data[(data['HomeTeam'] == team_name) | (data['AwayTeam'] == team_name)]
+    team_matches = team_matches[team_matches['Date'] < match_date]
+    
+    total_points = 0
+    for _, match in team_matches.iterrows():
+        if match['HomeTeam'] == team_name:
+            total_points += 3 if match['FTR'] == 'H' else (1 if match['FTR'] == 'D' else 0)
+        else:
+            total_points += 3 if match['FTR'] == 'A' else (1 if match['FTR'] == 'D' else 0)
+    
+    return total_points
+
+def add_form_and_points_features(data, window=2):
+    """
+    Add form and total points features to the dataset for each match.
     """
     data['HomeTeam_Form'] = 0
     data['AwayTeam_Form'] = 0
+    data['HTP'] = 0
+    data['ATP'] = 0
     
     for idx, match in data.iterrows():
         home_team = match['HomeTeam']
         away_team = match['AwayTeam']
         match_date = match['Date']
         
-        home_form = calculate_team_form(data, home_team, match_date, window)
-        away_form = calculate_team_form(data, away_team, match_date, window)
-        
-        data.at[idx, 'HomeTeam_Form'] = home_form
-        data.at[idx, 'AwayTeam_Form'] = away_form
+        data.at[idx, 'HomeTeam_Form'] = calculate_team_form(data, home_team, match_date, window)
+        data.at[idx, 'AwayTeam_Form'] = calculate_team_form(data, away_team, match_date, window)
+        data.at[idx, 'HTP'] = calculate_total_points(data, home_team, match_date)
+        data.at[idx, 'ATP'] = calculate_total_points(data, away_team, match_date)
     
     return data
 
-data = add_form_features(data)
+data = add_form_and_points_features(data)
+data.to_csv("/home/alexandros/ml_bet/i1/data_ext2.csv", index=None, sep='|')
+
 
 # Compute additional features
 data['TotalShots'] = data['HS'] + data['AS']
@@ -84,7 +103,7 @@ features = [
     'HomeTeam', 'AwayTeam', 'HS', 'AS', 'HF', 'AF', 'HC', 'AC',
     'RollingAvg_FTHG', 'RollingAvg_FTAG', 'RollingAvg_TotalShots',
     'RollingAvg_TotalCorners', 'RollingAvg_HomeHST', 'RollingAvg_AwayAST',
-    'HomeTeam_Form', 'AwayTeam_Form'
+    'HomeTeam_Form', 'AwayTeam_Form', 'HTP', 'ATP'
 ]
 
 data_filtered = data[features + ['FTR']].dropna()
@@ -181,7 +200,8 @@ def prepare_match_prediction(home_team, away_team):
         'RollingAvg_FTHG': 1.8, 'RollingAvg_FTAG': 0.8,
         'RollingAvg_TotalShots': 27.8, 'RollingAvg_TotalCorners': 10.4,
         'RollingAvg_HomeHST': 6.6, 'RollingAvg_AwayAST': 2.4,
-        'HomeTeam_Form': 0, 'AwayTeam_Form': 4
+        'HomeTeam_Form': 0, 'AwayTeam_Form': 4,
+        'HTP': 55, 'ATP': 35
     }
     return pd.DataFrame([match_features])
 

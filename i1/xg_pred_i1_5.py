@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report
 from xgboost import XGBClassifier
@@ -11,6 +11,21 @@ data = pd.read_csv('I1_24_25.csv')
 
 # Ensure Date column is in datetime format
 data['Date'] = pd.to_datetime(data['Date'])
+
+# Fill missing market odds with median values
+for col in ['B365H', 'B365D', 'B365A']:
+    data[col] = data[col].fillna(data[col].median())
+
+# Convert odds to implied probability (Optional)
+data['Implied_Prob_H'] = 1 / data['B365H']
+data['Implied_Prob_D'] = 1 / data['B365D']
+data['Implied_Prob_A'] = 1 / data['B365A']
+
+# Normalize implied probabilities (Optional: StandardScaler)
+scaler = StandardScaler()
+data[['Implied_Prob_H', 'Implied_Prob_D', 'Implied_Prob_A']] = scaler.fit_transform(
+    data[['Implied_Prob_H', 'Implied_Prob_D', 'Implied_Prob_A']]
+)
 
 # Define correct FTR mapping
 ftr_mapping = {'H': 0, 'D': 1, 'A': 2}
@@ -84,7 +99,8 @@ features = [
     'HomeTeam', 'AwayTeam', 'HS', 'AS', 'HF', 'AF', 'HC', 'AC',
     'RollingAvg_FTHG', 'RollingAvg_FTAG', 'RollingAvg_TotalShots',
     'RollingAvg_TotalCorners', 'RollingAvg_HomeHST', 'RollingAvg_AwayAST',
-    'HomeTeam_Form', 'AwayTeam_Form'
+    'HomeTeam_Form', 'AwayTeam_Form',
+    'Implied_Prob_H', 'Implied_Prob_D', 'Implied_Prob_A'
 ]
 
 data_filtered = data[features + ['FTR']].dropna()
@@ -181,7 +197,8 @@ def prepare_match_prediction(home_team, away_team):
         'RollingAvg_FTHG': 1.8, 'RollingAvg_FTAG': 0.8,
         'RollingAvg_TotalShots': 27.8, 'RollingAvg_TotalCorners': 10.4,
         'RollingAvg_HomeHST': 6.6, 'RollingAvg_AwayAST': 2.4,
-        'HomeTeam_Form': 0, 'AwayTeam_Form': 4
+        'HomeTeam_Form': 0, 'AwayTeam_Form': 4,
+        'Implied_Prob_H': 0.62, 'Implied_Prob_D': 0.26, 'Implied_Prob_A': 0.17
     }
     return pd.DataFrame([match_features])
 
