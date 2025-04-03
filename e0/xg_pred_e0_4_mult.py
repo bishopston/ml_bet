@@ -5,9 +5,10 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
+from match_features_mult_e0_1 import match_features
 
 # Load the dataset
-data = pd.read_csv('I1_24_25.csv')
+data = pd.read_csv('E0_24_25.csv')
 
 # Ensure Date column is in datetime format
 data['Date'] = pd.to_datetime(data['Date'])
@@ -173,52 +174,122 @@ plt.tight_layout()
 # Save the plot to a file
 plt.savefig('feature_importances.png')
 
-# Prepare match prediction
-def prepare_match_prediction(home_team, away_team):
-    match_features = {
-        'HomeTeam': home_team, 'AwayTeam': away_team,
-        'HS': 10.8, 'AS': 14.4, 'HF': 13.2, 'AF': 11.6, 'HC': 7.0, 'AC': 6.8,
-        'RollingAvg_FTHG': 0.4, 'RollingAvg_FTAG': 1.4,
-        'RollingAvg_TotalShots': 25.2, 'RollingAvg_TotalCorners': 13.8,
-        'RollingAvg_HomeHST': 2.4, 'RollingAvg_AwayAST': 6.0,
-        'HomeTeam_Form': 0, 'AwayTeam_Form': 6
-        }
-    return pd.DataFrame([match_features])
+def prepare_match_predictions(matches_with_features):
+    match_dataframes = []
+    
+    for match in matches_with_features:
+        home_team = match['home_team']
+        away_team = match['away_team']
+        features = match['features']
 
-# Prediction function
-def predict_match(model, home_team_name, away_team_name):
+        # Transform team names to encoded values
+        home_team_encoded = team_encoders['home'].transform([home_team])[0]
+        away_team_encoded = team_encoders['away'].transform([away_team])[0]
+        
+        match_features = {
+            'HomeTeam': home_team_encoded,
+            'AwayTeam': away_team_encoded,
+            'HS': features['HS'],
+            'AS': features['AS'],
+            'HF': features['HF'],
+            'AF': features['AF'],
+            'HC': features['HC'],
+            'AC': features['AC'],
+            'RollingAvg_FTHG': features['RollingAvg_FTHG'],
+            'RollingAvg_FTAG': features['RollingAvg_FTAG'],
+            'RollingAvg_TotalShots': features['RollingAvg_TotalShots'],
+            'RollingAvg_TotalCorners': features['RollingAvg_TotalCorners'],
+            'RollingAvg_HomeHST': features['RollingAvg_HomeHST'],
+            'RollingAvg_AwayAST': features['RollingAvg_AwayAST'],
+            'HomeTeam_Form': features['HomeTeam_Form'],
+            'AwayTeam_Form': features['AwayTeam_Form']
+        }
+        
+        match_dataframes.append(pd.DataFrame([match_features]))
+    
+    return match_dataframes
+
+def predict_matches(model, matches_with_features):
+    """
+    Predict outcomes for multiple matches at once.
+    
+    Args:
+        model: Trained XGBClassifier model
+        matches_with_features: List of dictionaries containing match details and features
+        
+    Returns:
+        Dictionary mapping (home_team, away_team) to prediction probabilities
+    """
     available_home_teams = set(team_encoders['home'].classes_)
     available_away_teams = set(team_encoders['away'].classes_)
     
-    if home_team_name not in available_home_teams or away_team_name not in available_away_teams:
-        print("\nWarning: Teams not found in training data.")
-        return None
+    predictions = {}
     
-    home_team = team_encoders['home'].transform([home_team_name])[0]
-    away_team = team_encoders['away'].transform([away_team_name])[0]
+    for match in matches_with_features:
+        # Check if teams exist in training data
+        if match['home_team'] not in available_home_teams or match['away_team'] not in available_away_teams:
+            print(f"\nWarning: Teams not found in training data: {match['home_team']} vs {match['away_team']}")
+            continue
+            
+        # Transform team names to encoded values
+        home_team = team_encoders['home'].transform([match['home_team']])[0]
+        away_team = team_encoders['away'].transform([match['away_team']])[0]
+        
+        # Prepare match features
+        match_data = prepare_match_predictions([match])[0]
+        
+        # Get predictions
+        predictions_proba = model.predict_proba(match_data)
+        
+        # Convert to readable format
+        result_map = {0: 'Home Win', 1: 'Draw', 2: 'Away Win'}
+        probabilities = {
+            'Home Win': round(predictions_proba[0][0] * 100, 2),
+            'Draw': round(predictions_proba[0][1] * 100, 2),
+            'Away Win': round(predictions_proba[0][2] * 100, 2)
+        }
+        
+        predictions[(match['home_team'], match['away_team'])] = probabilities
     
-    match_data = prepare_match_prediction(int(home_team), int(away_team))
-    
-    # Predict probabilities
-    predictions = model.predict_proba(match_data)
-    
-    # Ensure correct mapping for predictions
-    result_map = {0: 'Home Win', 1: 'Draw', 2: 'Away Win'}
-    probabilities = {
-        'Home Win': round(predictions[0][0] * 100, 2),
-        'Draw': round(predictions[0][1] * 100, 2),
-        'Away Win': round(predictions[0][2] * 100, 2)
-    }
-    
-    return probabilities
+    return predictions
 
-# Example usage
-team_names = ['Lecce', 'Roma']
-probabilities = predict_match(model, team_names[0], team_names[1])
+# Example usage with multiple games
+# matches_with_features = [
+#     {
+#         'home_team': 'Chelsea',
+#         'away_team': 'Tottenham',
+#         'features': {
+#             'HS': 21.2, 'AS': 11.2, 'HF': 10.4, 'AF': 11.6,
+#             'HC': 6.4, 'AC': 4.8, 'RollingAvg_FTHG': 2.4,
+#             'RollingAvg_FTAG': 1.8, 'RollingAvg_TotalShots': 32.4,
+#             'RollingAvg_TotalCorners': 11.2, 'RollingAvg_HomeHST': 7.4,
+#             'RollingAvg_AwayAST': 4.0, 'HomeTeam_Form': 3, 'AwayTeam_Form': 1
+#         }
+#     },
+#     {
+#         'home_team': 'Liverpool',
+#         'away_team': 'Man City',
+#         'features': {
+#             'HS': 20.5, 'AS': 12.1, 'HF': 11.3, 'AF': 10.8,
+#             'HC': 7.2, 'AC': 5.1, 'RollingAvg_FTHG': 2.6,
+#             'RollingAvg_FTAG': 1.9, 'RollingAvg_TotalShots': 33.6,
+#             'RollingAvg_TotalCorners': 12.5, 'RollingAvg_HomeHST': 8.1,
+#             'RollingAvg_AwayAST': 4.2, 'HomeTeam_Form': 4, 'AwayTeam_Form': 2
+#         }
+#     }
+# ]
 
-if probabilities is None:
-    print("\nPlease use the exact team names as they appear in the dataset.")
-else:
-    print("\nPrediction Results:")
-    for outcome, prob in probabilities.items():
+matches_with_features = match_features
+
+#print(match_features)
+
+# Get predictions for all matches
+predictions = predict_matches(model, matches_with_features)
+
+# Print results in a formatted way
+print("\nMultiple Match Predictions:")
+print("-" * 50)
+for (home_team, away_team), probs in predictions.items():
+    print(f"\n{home_team} vs {away_team}:")
+    for outcome, prob in probs.items():
         print(f"{outcome}: {prob}%")

@@ -177,11 +177,11 @@ plt.savefig('feature_importances.png')
 def prepare_match_prediction(home_team, away_team):
     match_features = {
         'HomeTeam': home_team, 'AwayTeam': away_team,
-        'HS': 14.8, 'AS': 8.2, 'HF': 13.8, 'AF': 11.8, 'HC': 5.0, 'AC': 3.4,
-        'RollingAvg_FTHG': 1.4, 'RollingAvg_FTAG': 1.2,
-        'RollingAvg_TotalShots': 23.0, 'RollingAvg_TotalCorners': 8.4,
-        'RollingAvg_HomeHST': 5.8, 'RollingAvg_AwayAST': 4.0,
-        'HomeTeam_Form': 1, 'AwayTeam_Form': 0
+        'HS': 21.2, 'AS': 11.2, 'HF': 10.4, 'AF': 11.6, 'HC': 6.4, 'AC': 4.8,
+        'RollingAvg_FTHG': 2.4, 'RollingAvg_FTAG': 1.8,
+        'RollingAvg_TotalShots': 32.4, 'RollingAvg_TotalCorners': 11.2,
+        'RollingAvg_HomeHST': 7.4, 'RollingAvg_AwayAST': 4.0,
+        'HomeTeam_Form': 3, 'AwayTeam_Form': 1
     }
     return pd.DataFrame([match_features])
 
@@ -213,7 +213,7 @@ def predict_match(model, home_team_name, away_team_name):
     return probabilities
 
 # Example usage
-team_names = ['Bournemouth', 'Ipswich']
+team_names = ['Chelsea', 'Tottenham']
 probabilities = predict_match(model, team_names[0], team_names[1])
 
 if probabilities is None:

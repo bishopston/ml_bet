@@ -297,8 +297,8 @@ def estimate_total_corners(data, home_team, away_team, match_date=None, window=5
 data = pd.read_csv('../i1/I1_24_25.csv')
 
 data['Date'] = pd.to_datetime(data['Date'])  # Ensure Date column is in datetime format
-home_team = "Juventus"
-away_team = "Genoa"
+home_team = "Cagliari"
+away_team = "Monza"
 
 #estimated_home_shots = compute_home_shots_rolling_avg(data, home_team)
 #print(f"Estimated Rolling Average HS for {home_team} at home: {estimated_home_shots}")

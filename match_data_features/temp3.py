@@ -200,6 +200,47 @@ def estimate_total_corners(data, home_team, away_team, match_date=None, window=5
 
     total_corners_estimate = avg_home_corners + avg_away_corners
     return total_corners_estimate
+    
+
+def calculate_form_features(home_team, away_team, data, match_date=None):
+    """
+    Calculate features for an upcoming match between two teams.
+    Uses the latest 5 matches to determine form and rolling averages.
+    """
+    # Ensure Date column is in datetime format
+    data['Date'] = pd.to_datetime(data['Date'])
+    
+    if match_date is None:
+        match_date = datetime.now()
+
+    # Filter the last 5 matches for each team
+    home_team_matches = data[
+        (data['HomeTeam'] == home_team) | (data['AwayTeam'] == home_team)
+    ].sort_values(by='Date', ascending=False).head(2)
+
+    away_team_matches = data[
+        (data['HomeTeam'] == away_team) | (data['AwayTeam'] == away_team)
+    ].sort_values(by='Date', ascending=False).head(2)
+
+    # Calculate form points (3 for win, 1 for draw, 0 for loss)
+    def calculate_form(matches, team):
+        form_points = 0
+        for _, match in matches.iterrows():
+            if match['HomeTeam'] == team:
+                if match['FTR'] == 'H':
+                    form_points += 3
+                elif match['FTR'] == 'D':
+                    form_points += 1
+            else:
+                if match['FTR'] == 'A':
+                    form_points += 3
+                elif match['FTR'] == 'D':
+                    form_points += 1
+        return form_points
+
+    return {'HomeTeam_Form': calculate_form(home_team_matches, home_team),
+            'AwayTeam_Form': calculate_form(away_team_matches, away_team)}
+
 
 def calculate_match_features(home_team, away_team, data, match_date=None, window=5):
     """
@@ -212,23 +253,25 @@ def calculate_match_features(home_team, away_team, data, match_date=None, window
     data['Date'] = pd.to_datetime(data['Date'])
     if match_date is None:
         match_date = datetime.now()
-    
+        
     match_features = {
         'home_team': home_team,
         'away_team': away_team,
         'features': {
-            'HS': float(compute_home_shots_rolling_avg(data, home_team, match_date, window)),  # Convert to pure float
-            'AS': float(compute_away_shots_rolling_avg(data, away_team, match_date, window)),  # Convert to pure float
-            'HF': float(compute_home_fouls_rolling_avg(data, home_team, match_date, window)),  # Convert to pure float
-            'AF': float(compute_away_fouls_rolling_avg(data, away_team, match_date, window)),  # Convert to pure float
+            'HS': float(compute_home_shots_rolling_avg(data, home_team, match_date, window)),
+            'AS': float(compute_away_shots_rolling_avg(data, away_team, match_date, window)),
+            'HF': float(compute_home_fouls_rolling_avg(data, home_team, match_date, window)),
+            'AF': float(compute_away_fouls_rolling_avg(data, away_team, match_date, window)),
             'HC': float(compute_home_corners_rolling_avg(data, away_team, match_date, window)),
             'AC': float(compute_away_corners_rolling_avg(data, away_team, match_date, window)),
             'RollingAvg_FTHG': float(compute_home_goals_rolling_avg(data, away_team, match_date, window)),
             'RollingAvg_FTAG': float(compute_away_goals_rolling_avg(data, away_team, match_date, window)),
             'RollingAvg_TotalShots': float(estimate_total_shots(data, home_team, away_team, match_date, window)),
             'RollingAvg_TotalCorners': float(estimate_total_corners(data, home_team, away_team, match_date, window)),
-            'HST': float(compute_home_shots_on_target_rolling_avg(data, home_team, match_date, window)),  # Convert to pure float
-            'AST': float(compute_away_shots_on_target_rolling_avg(data, away_team, match_date, window)),  # Convert to pure float
+            'HST': float(compute_home_shots_on_target_rolling_avg(data, home_team, match_date, window)),
+            'AST': float(compute_away_shots_on_target_rolling_avg(data, away_team, match_date, window)),
+            'HomeTeam_Form': float(calculate_form_features(home_team, away_team, data, match_date)['HomeTeam_Form']),
+            'AwayTeam_Form': float(calculate_form_features(home_team, away_team, data, match_date)['AwayTeam_Form']),
         }
     }
     return match_features
