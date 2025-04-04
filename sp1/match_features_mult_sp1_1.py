@@ -282,13 +282,13 @@ def prepare_all_matches(data, upcoming_matches):
     return match_features_list
 
 # Example usage
-data = pd.read_csv('../d1/24_25/D1_300325.csv')  # Make sure this is the correct path to your CSV
+data = pd.read_csv('../sp1/24_25/SP1_020425.csv')  # Make sure this is the correct path to your CSV
 data['Date'] = pd.to_datetime(data['Date'])  # Ensure the 'Date' column is in datetime format
 
 # List of upcoming matches
 upcoming_matches = pd.DataFrame({
-    'HomeTeam': ['Augsburg', 'Heidenheim', 'Mainz', 'Freiburg', 'RB Leipzig', 'Bochum', 'Werder Bremen', 'St Pauli', 'Union Berlin'],
-    'AwayTeam': ['Bayern Munich', 'Leverkusen', 'Holstein Kiel', 'Dortmund', 'Hoffenheim', 'Stuttgart', 'Ein Frankfurt', 'M\'gladbach', 'Wolfsburg']
+    'HomeTeam': ['Vallecano', 'Girona', 'Real Madrid', 'Mallorca', 'Barcelona', 'Las Palmas', 'Sevilla', 'Valladolid', 'Villarreal', 'Leganes'],
+    'AwayTeam': ['Espanol', 'Alaves', 'Valencia', 'Celta', 'Betis', 'Sociedad', 'Ath Madrid', 'Getafe', 'Ath Bilbao', 'Osasuna']
 })
 
 # Get match features for multiple upcoming matches
