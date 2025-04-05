@@ -5,13 +5,13 @@ from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report
 from xgboost import XGBClassifier
 import matplotlib.pyplot as plt
-from match_features_mult_e0_1 import match_features
+from match_features_mult_e1_1 import match_features
 
 # Load the dataset
-data = pd.read_csv('../e0/24_25/E0_030425.csv')
+data = pd.read_csv('../e1/24_25/E1_020425.csv')
 
 # Ensure Date column is in datetime format
-data['Date'] = pd.to_datetime(data['Date'])
+data['Date'] = pd.to_datetime(data['Date'], dayfirst=True)
 
 # Define correct FTR mapping
 ftr_mapping = {'H': 0, 'D': 1, 'A': 2}
