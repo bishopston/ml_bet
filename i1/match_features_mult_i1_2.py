@@ -296,5 +296,35 @@ upcoming_matches = pd.DataFrame({
 # Get match features for multiple upcoming matches
 match_features = prepare_all_matches(data, upcoming_matches)
 
+def flatten_match_features(features_list):
+    """Convert list of match feature dictionaries into a flat DataFrame."""
+    flattened_rows = []
+    
+    for match in features_list:
+        home_team = match['home_team']
+        away_team = match['away_team']
+        
+        # Extract all features from the 'features' dictionary
+        features = match['features']
+        
+        # Combine team names with features into a single row
+        row = {
+            'HomeTeam': home_team,
+            'AwayTeam': away_team
+        }
+        row.update(features)
+        
+        flattened_rows.append(row)
+    
+    return pd.DataFrame(flattened_rows)
+
 # Print match features
 print(match_features)
+
+# Convert to flat DataFrame and save to CSV
+flattened_df = flatten_match_features(match_features)
+
+# Add 'mg_' prefix to all columns
+flattened_df = flattened_df.add_prefix('mg_')
+
+flattened_df.to_csv('match_features_flattened.csv', index=False)
