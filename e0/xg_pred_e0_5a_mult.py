@@ -4,11 +4,15 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split, cross_val_score
 from sklearn.metrics import accuracy_score, classification_report
 from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
+from lightgbm import LGBMClassifier
+from sklearn.ensemble import RandomForestClassifier, StackingClassifier
+from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
-from match_features_mult_d1_1 import match_features
+from match_features_mult_e0_5 import match_features
 
 # Load the dataset
-data = pd.read_csv('../d1/24_25/D1_060425.csv')
+data = pd.read_csv('../e0/24_25/E0_070425.csv')
 
 # Ensure Date column is in datetime format
 data['Date'] = pd.to_datetime(data['Date'])
@@ -62,29 +66,60 @@ data['TotalShotsOnTarget'] = data['HST'] + data['AST']
 data['TotalCorners'] = data['HC'] + data['AC']
 
 # Rolling averages
-def compute_rolling_avg(data, window=5):
-    # Compute rolling averages for the last 'window' matches
-    data['RollingAvg_FTHG'] = data['FTHG'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_FTAG'] = data['FTAG'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_TotalShots'] = data['TotalShots'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_TotalCorners'] = data['TotalCorners'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHS'] = data['HS'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHST'] = data['HST'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHF'] = data['HF'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_HomeHC'] = data['HC'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAS'] = data['AS'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAST'] = data['AST'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAF'] = data['AF'].rolling(window=window, min_periods=1).mean()
-    data['RollingAvg_AwayAC'] = data['AC'].rolling(window=window, min_periods=1).mean()
+def compute_team_rolling_averages(data, window=5):
+    """
+    Compute rolling averages for each team over their last 'window' matches.
+    This is done individually for Home and Away contexts.
+    """
+    # Initialize new columns with NaNs
+    rolling_features = [
+        'FTHG', 'FTAG', 'TotalShots', 'TotalCorners',
+        'HS', 'HST', 'HF', 'HC', 'AS', 'AST', 'AF', 'AC'
+    ]
+    
+    for feature in rolling_features:
+        data[f'RollingAvg_Home_{feature}'] = np.nan
+        data[f'RollingAvg_Away_{feature}'] = np.nan
+
+    # Process for each team
+    teams = pd.unique(data[['HomeTeam', 'AwayTeam']].values.ravel('K'))
+    
+    for team in teams:
+        # All matches involving the team
+        team_matches = data[(data['HomeTeam'] == team) | (data['AwayTeam'] == team)].copy()
+        team_matches = team_matches.sort_values('Date')
+
+        rolling_values = {
+            feature: [] for feature in rolling_features
+        }
+
+        for idx, row in team_matches.iterrows():
+            is_home = row['HomeTeam'] == team
+            match_idx = idx
+
+            # Extract previous matches
+            previous_matches = team_matches[team_matches['Date'] < row['Date']]
+            previous_matches = previous_matches.tail(window)
+
+            for feature in rolling_features:
+                values = previous_matches[feature]
+                rolling_mean = values.mean() if not values.empty else np.nan
+                col_name = f'RollingAvg_Home_{feature}' if is_home else f'RollingAvg_Away_{feature}'
+                data.at[match_idx, col_name] = rolling_mean
+
     return data
 
-data = compute_rolling_avg(data)
+data = compute_team_rolling_averages(data, window=5)
 
 # Define features
 features = [
-    'HomeTeam', 'AwayTeam', 'HS', 'AS', 'HF', 'AF', 'HC', 'AC',
-    'RollingAvg_FTHG', 'RollingAvg_FTAG', 'RollingAvg_TotalShots',
-    'RollingAvg_TotalCorners', 'RollingAvg_HomeHST', 'RollingAvg_AwayAST',
+    'HomeTeam', 'AwayTeam', 'RollingAvg_Home_HS', 'RollingAvg_Away_AS', 
+    'RollingAvg_Home_HF', 'RollingAvg_Away_AF',
+    'RollingAvg_Home_HC', 'RollingAvg_Away_AC',
+    'RollingAvg_Home_FTHG', 'RollingAvg_Away_FTAG', 
+    # 'RollingAvg_Home_TotalShots', 'RollingAvg_Away_TotalShots'
+    # 'RollingAvg_Home_TotalCorners', 'RollingAvg_Away_TotalCorners',
+    'RollingAvg_Home_HST', 'RollingAvg_Away_AST',
     'HomeTeam_Form', 'AwayTeam_Form'
 ]
 
@@ -111,15 +146,17 @@ y = data_filtered['FTR']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
 # Train XGBoost model
-model = XGBClassifier(
-    eval_metric='mlogloss', 
-    use_label_encoder=False,
-    reg_alpha=0.5,  # Increase L1 regularization
-    reg_lambda=2,   # Keep L2 regularization
-    max_depth=6,    # Limiting tree depth
+
+model = LGBMClassifier(
+    objective='multiclass',
+    num_class=3,
     learning_rate=0.03,
-    subsample=0.7,  # Subsample fraction for each tree
-    colsample_bytree=0.7  # Column sampling for each tree
+    max_depth=6,
+    num_leaves=31,
+    reg_alpha=0.5,
+    reg_lambda=2,
+    subsample=0.7,
+    colsample_bytree=0.7
 )
 model.fit(X_train, y_train)
 
@@ -174,6 +211,29 @@ plt.tight_layout()
 # Save the plot to a file
 plt.savefig('feature_importances.png')
 
+def transform_features_for_model(match_features_list):
+    transformed_data = []
+    for match in match_features_list:
+        f = match['features']
+        transformed_data.append({
+            'HomeTeam': match['home_team'],
+            'AwayTeam': match['away_team'],
+            'RollingAvg_Home_HS': f.get('HS'),
+            'RollingAvg_Away_AS': f.get('AS'),
+            'RollingAvg_Home_HF': f.get('HF'),
+            'RollingAvg_Away_AF': f.get('AF'),
+            'RollingAvg_Home_HC': f.get('HC'),
+            'RollingAvg_Away_AC': f.get('AC'),
+            'RollingAvg_Home_FTHG': f.get('RollingAvg_FTHG'),
+            'RollingAvg_Away_FTAG': f.get('RollingAvg_FTAG'),
+            'RollingAvg_Home_HST': f.get('RollingAvg_HomeHST'),
+            'RollingAvg_Away_AST': f.get('RollingAvg_AwayAST'),
+            'HomeTeam_Form': f.get('HomeTeam_Form'),
+            'AwayTeam_Form': f.get('AwayTeam_Form'),
+        })
+    return transformed_data
+
+
 def prepare_match_predictions(matches_with_features):
     match_dataframes = []
     
@@ -189,22 +249,20 @@ def prepare_match_predictions(matches_with_features):
         match_features = {
             'HomeTeam': home_team_encoded,
             'AwayTeam': away_team_encoded,
-            'HS': features['HS'],
-            'AS': features['AS'],
-            'HF': features['HF'],
-            'AF': features['AF'],
-            'HC': features['HC'],
-            'AC': features['AC'],
-            'RollingAvg_FTHG': features['RollingAvg_FTHG'],
-            'RollingAvg_FTAG': features['RollingAvg_FTAG'],
-            'RollingAvg_TotalShots': features['RollingAvg_TotalShots'],
-            'RollingAvg_TotalCorners': features['RollingAvg_TotalCorners'],
-            'RollingAvg_HomeHST': features['RollingAvg_HomeHST'],
-            'RollingAvg_AwayAST': features['RollingAvg_AwayAST'],
+            'RollingAvg_Home_HS': features['HS'],
+            'RollingAvg_Away_AS': features['AS'],
+            'RollingAvg_Home_HF': features['HF'],
+            'RollingAvg_Away_AF': features['AF'],
+            'RollingAvg_Home_HC': features['HC'],
+            'RollingAvg_Away_AC': features['AC'],
+            'RollingAvg_Home_FTHG': features['RollingAvg_FTHG'],
+            'RollingAvg_Away_FTAG': features['RollingAvg_FTAG'],
+            'RollingAvg_Home_HST': features['RollingAvg_HomeHST'],
+            'RollingAvg_Away_AST': features['RollingAvg_AwayAST'],
             'HomeTeam_Form': features['HomeTeam_Form'],
             'AwayTeam_Form': features['AwayTeam_Form']
         }
-        
+      
         match_dataframes.append(pd.DataFrame([match_features]))
     
     return match_dataframes
@@ -282,6 +340,10 @@ def predict_matches(model, matches_with_features):
 matches_with_features = match_features
 
 #print(match_features)
+
+transformed_matches = transform_features_for_model(match_features)
+df_matches = pd.DataFrame(transformed_matches)
+#predictions = predict_matches(model, df_matches)
 
 # Get predictions for all matches
 predictions = predict_matches(model, matches_with_features)
